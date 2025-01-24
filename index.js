@@ -5,6 +5,7 @@ require('dotenv').config()
 
 //MongoDB connection
 const mongoose = require('mongoose');
+const e = require('express');
 mongoose.connect(process.env.MONGO_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true
@@ -29,6 +30,8 @@ const exerciseSchema = new mongoose.Schema({
 const User = mongoose.Model('User', userSchema);
 const Exercise = mongoose.Model('Exercise', exerciseSchema);
 
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 app.use(cors())
 app.use(express.static('public'))
@@ -36,11 +39,12 @@ app.get('/', (req, res) => {
   res.sendFile(__dirname + '/views/index.html')
 });
 
-app.post('/api/users', function(req, res) {
+app.post('/api/users', async function(req, res) {
   const {username} = req.body;
+
   try {
     const newUser = new User({username});
-    newUser.save();
+    await newUser.save();
     res.json({ username: newUser.username, _id: newUser._id});
   } catch (err) {
     console.error(err);
@@ -48,25 +52,35 @@ app.post('/api/users', function(req, res) {
   }
 });
 
-app.get('/api/users', function(req,res) {
-
+app.get('/api/users', async function(req,res) {
+  try {
+    const users = await User.find({});
+    res.json(users.map(user => ({username: user.username, _id: user._id})));
+  } catch (err) {
+    console.error(err);
+    res.json({error: "Failed to retrieve users."});
+  };
 });
 
-app.post('/api/users/:_id/exercises', function(req, res) {
+app.post('/api/users/:_id/exercises', async function(req, res) {
   const {description, duration, date} = req.body;
   const id = req.params._id
+
   try {
-    const user = User.findById(id);
+    const user = await User.findById(id);
     if (!user) {
       return res.json({error: "User with id: " + id + " not found."});
     }
+
     const newExercise = new Exercise({
       userId: user._id,
       description: description,
-      duration: parseInt(duration),
+      duration: parseInt(duration, 10),
       date: date ? new Date(date) : new Date()
     });
-    newExercise.save();
+
+    await newExercise.save();
+
     res.json({
       username: user.username,
       description: newExercise.description,
@@ -80,8 +94,39 @@ app.post('/api/users/:_id/exercises', function(req, res) {
   }
 });
 
-app.get('/api/users/:_id/logs', function(req, res) {
+app.get('/api/users/:_id/logs', async function(req, res) {
+  const id = req.params._id;
+  const {from, to, limit} = req.query;
 
+  try {
+    const user = await User.findById(id);
+    if (!user) {
+      res.json({error: "User with id: " + id + " not found."});
+    }
+
+    let query = {userId: _id};
+    if (from || to) {
+      query.date = {};
+      if (from) query.date.$gte = new Date(from);
+      if (to) query.date.$lte = new Date(to);
+    }
+
+    let exercises = await Exercise.find(query).limit(parseInt(limit, 10) || 0);
+
+    res.json({
+      username: user.username,
+      count: exercises.length,
+      _id: user._id,
+      log: exercises.map(ex => ({
+        description: ex.description,
+        duration: ex.duration,
+        date: ex.date.toDateString(),
+      }))
+    });
+  } catch (err) {
+    console.error(err);
+    res.json({error: "Failed to retrieve logs."});
+  }
 });
 
 
