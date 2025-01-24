@@ -14,6 +14,7 @@ const db = mongoose.connection;
 db.once('open', () => {
   console.log(' Succesfully connected to MongoDB Cluster');
 });
+db.on('error', console.error.bind(console, 'MongoDB connection error:'));
 
 //Mongoose schemas
 const userSchema = new mongoose.Schema({
@@ -27,8 +28,8 @@ const exerciseSchema = new mongoose.Schema({
 });
 
 //Mongoose Models
-const User = mongoose.Model('User', userSchema);
-const Exercise = mongoose.Model('Exercise', exerciseSchema);
+const User = mongoose.model('User', userSchema);
+const Exercise = mongoose.model('Exercise', exerciseSchema);
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -101,10 +102,10 @@ app.get('/api/users/:_id/logs', async function(req, res) {
   try {
     const user = await User.findById(id);
     if (!user) {
-      res.json({error: "User with id: " + id + " not found."});
+      return res.json({error: "User with id: " + id + " not found."});
     }
 
-    let query = {userId: _id};
+    let query = {userId: id};
     if (from || to) {
       query.date = {};
       if (from) query.date.$gte = new Date(from);
